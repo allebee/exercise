@@ -1,0 +1,121 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Video Stream</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f2f2f2;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        #video {
+            display: block;
+            margin: 0 auto;
+            border: 2px solid #333;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .button-container {
+            margin: 20px 0;
+        }
+
+        button {
+            font-size: 16px;
+            padding: 10px 20px;
+            margin: 5px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Pose Detection</h1>
+    <div class="button-container">
+        <button onclick="connectWebSocket('/ws/plank')">Plank Detection</button>
+        <button onclick="connectWebSocket('/ws/lunge')">Lunge Detection</button>
+        <button onclick="connectWebSocket('/ws/bicep_curl')">Bicep Curl Detection</button>
+        <button onclick="connectWebSocket('/ws/squat')">Squat Detection</button>
+    </div>
+    <img id="bwImage" width="640" height="480">
+    <script type="text/javascript">
+        var bwImage = document.getElementById('bwImage');
+        var socket = null;
+
+        function connectWebSocket(endpoint) {
+            // Close the previous WebSocket connection if it exists
+            if (socket) {
+                socket.close();
+            }
+
+            // Open a new WebSocket connection
+            socket = new WebSocket((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + endpoint);
+            console.log(socket)
+            socket.onopen = function () {
+                console.log("WebSocket connection established for " + endpoint);
+
+                // Now that the WebSocket is open, start sending data
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(function (stream) {
+                        var video = document.createElement('video');
+                        video.width = 640; // Reduce resolution
+                        video.height = 480;
+                        video.srcObject = stream;
+                        video.autoplay = true;
+
+                        var canvas = document.createElement('canvas');
+                        canvas.width = 640;
+                        canvas.height = 480;
+                        var context = canvas.getContext('2d');
+
+                        setInterval(function () {
+                            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                            var frame = canvas.toDataURL('image/jpeg', 0.8);
+                            if (socket.readyState === WebSocket.OPEN) {
+                                socket.send(frame); // Send data only when the WebSocket is open
+                            }
+                        }, 150);
+                    })
+                    .catch(function (error) {
+                        console.log('Error accessing camera: ', error);
+                    });
+            };
+
+            socket.onmessage = function (event) {
+                var imageData = event.data; // Assuming event.data contains the base64-encoded image data
+                bwImage.src = imageData;
+            };
+
+            socket.onerror = function (error) {
+                console.error("WebSocket error: " + error);
+            };
+
+            socket.onclose = function (event) {
+                if (event.wasClean) {
+                    console.log("WebSocket closed cleanly, code=" + event.code + ", reason=" + event.reason);
+                } else {
+                    console.error("WebSocket connection died");
+                }
+            };
+        }
+
+        // Connect to a default WebSocket endpoint on page load
+        connectWebSocket('/ws/plank');
+    </script>
+</body>
+
+</html>
